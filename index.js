@@ -9,22 +9,22 @@ async function start() {
 
     const sock = makeWASocket({
         auth: state,
+        printQRInTerminal: true, // Ensures QR code is printed to console
     });
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
-            console.log('QR Code Generated. Scan it with WhatsApp:');
-            console.log(qr);
+            console.log('Scan this QR with WhatsApp:\n', qr);
             await fs.writeFile(path.join(__dirname, 'qr.txt'), qr);
         }
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed:', lastDisconnect?.error, 'Reconnecting:', shouldReconnect);
             if (shouldReconnect) {
-                start();
+                start(); // Reconnect on disconnect
             } else {
-                console.log('Logged out. Please scan QR again.');
+                console.log('Logged out. Delete auth_info and scan QR again.');
                 await fs.rm(authDir, { recursive: true, force: true });
                 start();
             }
@@ -37,17 +37,16 @@ async function start() {
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-        console.log('Message received from JID:', msg.key.remoteJid); // Log JID for all messages
-        if (!msg.key.fromMe && msg.key.remoteJid === 'your-group-id@g.us') {
-            const text = msg.message?.conversation || '';
+        if (!msg.key.fromMe && msg.key.remoteJid.endsWith('@g.us')) { // Check for group messages
+            const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (text.startsWith('@ai ')) {
                 const prompt = text.slice(4).trim();
                 try {
-                    const response = await axios.post('your-n8n-webhook-url', { prompt });
-                    const answer = response.data.response;
+                    const response = await axios.post(process.env.N8N_WEBHOOK_URL, { prompt });
+                    const answer = response.data.response || 'No response from AI.';
                     await sock.sendMessage(msg.key.remoteJid, { text: answer });
                 } catch (error) {
-                    console.error('Error sending to n8n:', error);
+                    console.error('Error sending to n8n:', error.message);
                     await sock.sendMessage(msg.key.remoteJid, { text: 'Error processing request.' });
                 }
             }
