@@ -10,6 +10,8 @@ async function start() {
 
     const sock = makeWASocket({
         auth: state,
+        qrTimeout: 120000, // Set QR code timeout to 2 minutes (120,000 ms)
+        connectTimeoutMs: 60000, // Connection timeout (optional, for stability)
     });
 
     // HTTP server for Render health check
@@ -25,7 +27,7 @@ async function start() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
-            console.log('Scan this QR with WhatsApp:\n', qr);
+            console.log('Scan this QR with WhatsApp (valid for 2 minutes):\n', qr);
             await fs.writeFile(path.join(__dirname, 'qr.txt'), qr);
         }
         if (connection === 'close') {
