@@ -2,6 +2,7 @@ const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = requi
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
+const http = require('http');
 
 async function start() {
     const authDir = path.join(__dirname, 'auth_info');
@@ -9,7 +10,16 @@ async function start() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true, // Ensures QR code is printed to console
+    });
+
+    // HTTP server for Render health check
+    const server = http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('WhatsApp bot is running');
+    });
+    const port = process.env.PORT || 10000;
+    server.listen(port, () => {
+        console.log(`HTTP server running on port ${port} for Render health check`);
     });
 
     sock.ev.on('connection.update', async (update) => {
@@ -22,7 +32,7 @@ async function start() {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed:', lastDisconnect?.error, 'Reconnecting:', shouldReconnect);
             if (shouldReconnect) {
-                start(); // Reconnect on disconnect
+                start();
             } else {
                 console.log('Logged out. Delete auth_info and scan QR again.');
                 await fs.rm(authDir, { recursive: true, force: true });
@@ -37,7 +47,7 @@ async function start() {
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-        if (!msg.key.fromMe && msg.key.remoteJid.endsWith('@g.us')) { // Check for group messages
+        if (!msg.key.fromMe && msg.key.remoteJid.endsWith('@g.us')) {
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (text.startsWith('@ai ')) {
                 const prompt = text.slice(4).trim();
