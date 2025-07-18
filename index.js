@@ -3,6 +3,7 @@ const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
+const QRCode = require('qrcode'); // Added for QR code image generation
 
 async function start() {
     const authDir = path.join(__dirname, 'auth_info');
@@ -10,14 +11,22 @@ async function start() {
 
     const sock = makeWASocket({
         auth: state,
-        qrTimeout: 120000, // Set QR code timeout to 2 minutes (120,000 ms)
-        connectTimeoutMs: 60000, // Connection timeout (optional, for stability)
+        qrTimeout: 120000, // 2-minute QR code timeout
+        connectTimeoutMs: 60000, // Connection timeout
+        defaultQueryTimeoutMs: 60000, // Query timeout
+        keepAliveIntervalMs: 20000, // Keep-alive to prevent disconnects
     });
 
-    // HTTP server for Render health check
-    const server = http.createServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('WhatsApp bot is running');
+    // HTTP server for Render health check and QR code access
+    let qrUrl = '';
+    const server = http.createServer(async (req, res) => {
+        if (req.url === '/qr' && qrUrl) {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(`<img src="${qrUrl}" alt="Scan this QR with WhatsApp">`);
+        } else {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('WhatsApp bot is running');
+        }
     });
     const port = process.env.PORT || 10000;
     server.listen(port, () => {
@@ -27,8 +36,15 @@ async function start() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
-            console.log('Scan this QR with WhatsApp (valid for 2 minutes):\n', qr);
-            await fs.writeFile(path.join(__dirname, 'qr.txt'), qr);
+            try {
+                // Generate QR code as a data URL
+                qrUrl = await QRCode.toDataURL(qr);
+                console.log(`Scan this QR with WhatsApp (valid for 2 minutes): https://your-app.onrender.com/qr`);
+                console.log('Raw QR data:', qr); // Log raw QR for debugging
+                await fs.writeFile(path.join(__dirname, 'qr.txt'), qr);
+            } catch (err) {
+                console.error('QR code generation error:', err);
+            }
         }
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -42,6 +58,7 @@ async function start() {
             }
         } else if (connection === 'open') {
             console.log('Connected successfully');
+            qrUrl = ''; // Clear QR URL after successful connection
         }
     });
 
