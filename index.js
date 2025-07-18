@@ -4,7 +4,6 @@ const fs = require('fs').promises;
 const path = require('path');
 
 async function start() {
-    // Use a directory to store authentication state
     const authDir = path.join(__dirname, 'auth_info');
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
 
@@ -17,17 +16,16 @@ async function start() {
         if (qr) {
             console.log('QR Code Generated. Scan it with WhatsApp:');
             console.log(qr);
-            // Save QR to a file for easier access in Render logs
             await fs.writeFile(path.join(__dirname, 'qr.txt'), qr);
         }
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed:', lastDisconnect?.error, 'Reconnecting:', shouldReconnect);
             if (shouldReconnect) {
-                start(); // Reconnect
+                start();
             } else {
                 console.log('Logged out. Please scan QR again.');
-                await fs.rm(authDir, { recursive: true, force: true }); // Clear old auth
+                await fs.rm(authDir, { recursive: true, force: true });
                 start();
             }
         } else if (connection === 'open') {
@@ -35,10 +33,11 @@ async function start() {
         }
     });
 
-    sock.ev.on('creds.update', saveCreds); // Save auth credentials
+    sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
+        console.log('Message received from JID:', msg.key.remoteJid); // Log JID for all messages
         if (!msg.key.fromMe && msg.key.remoteJid === 'your-group-id@g.us') {
             const text = msg.message?.conversation || '';
             if (text.startsWith('@ai ')) {
