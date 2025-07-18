@@ -3,7 +3,7 @@ const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
-const QRCode = require('qrcode'); // Added for QR code image generation
+const QRCode = require('qrcode');
 
 async function start() {
     const authDir = path.join(__dirname, 'auth_info');
@@ -22,7 +22,7 @@ async function start() {
     const server = http.createServer(async (req, res) => {
         if (req.url === '/qr' && qrUrl) {
             res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(`<img src="${qrUrl}" alt="Scan this QR with WhatsApp">`);
+            res.end(`<img src="${qrUrl}" alt="Scan this QR with WhatsApp"><p>Scan within 2 minutes</p>`);
         } else {
             res.writeHead(200, { 'Content-Type': 'text/plain' });
             res.end('WhatsApp bot is running');
@@ -37,10 +37,9 @@ async function start() {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
             try {
-                // Generate QR code as a data URL
                 qrUrl = await QRCode.toDataURL(qr);
                 console.log(`Scan this QR with WhatsApp (valid for 2 minutes): https://your-app.onrender.com/qr`);
-                console.log('Raw QR data:', qr); // Log raw QR for debugging
+                console.log('Raw QR data:', qr);
                 await fs.writeFile(path.join(__dirname, 'qr.txt'), qr);
             } catch (err) {
                 console.error('QR code generation error:', err);
@@ -58,7 +57,7 @@ async function start() {
             }
         } else if (connection === 'open') {
             console.log('Connected successfully');
-            qrUrl = ''; // Clear QR URL after successful connection
+            qrUrl = '';
         }
     });
 
